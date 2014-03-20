@@ -1,0 +1,35 @@
+{
+	"manifest_version": 2,
+	"name": "Nuxeo Images Web Search Extension",
+	"version": "0.8",
+	
+	"description": "When searching images.google.com for images, this extension will also display results from your Nuxeo DAM system. It requires Nuxeo v5.7 or greater.",
+	"icons": {	"16"  : "images/frog-16.png",
+				"48"  : "images/frog-48.png",
+				"128" : "images/frog-128.png" },
+	"homepage_url": "http://www.nuxeo.com",
+	
+	"page_action": {
+		"default_icon": {
+			"19": "images/frog-19.png",
+			"38": "images/frog-38.png"
+		},
+		"default_title": "Extend Google search to your Nuxeo DAM application",
+		"default_popup": "popup.html"
+	},
+	"background": {
+		"persistent" : false,
+		"scripts": ["scripts/utils.js",
+					"scripts/nuxeo/NUXEO.js",
+					"scripts/background/background-main.js"]
+	},
+	"permissions": [
+		"storage",
+		"tabs",
+		"notifications",
+		"http://*/*",
+		"https://*/*"
+	],
+	
+	"minimum_chrome_version": "12"
+}

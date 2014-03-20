@@ -1,0 +1,92 @@
+/* popup.css
+
+*/
+
+/**************************************************
+ Main, general elements
+ *************************************************/
+body {
+	background: #e8e8e8;
+	color: #484848;
+	font-size: 14px;
+	font-family: Helvetica, Arial, sans-serif;
+	line-height: 1.5;
+}
+
+label {
+	font-size: 14px;
+}
+
+body.popup {
+	min-height: 10px;
+	-webkit-user-select: none;
+	margin: 0px;
+}
+
+#main {
+	margin: 1px;
+	padding: 7px 12px;
+	padding-bottom: 9px;
+	-webkit-border-radius: 2px;
+	background: #f2f5f6;
+}
+
+img {
+	margin: 5px;
+	border: 2px solid black;
+	vertical-align: middle;
+	width: 75px;
+	height: 75px;
+}
+
+/**************************************************
+ Main form (nuxeo url/login/pwd/enable-disable
+ *************************************************/
+.enableCheckboxBlock {
+	margin-top: 15px;
+	padding-bottom: 5px;
+}
+
+#popupForm input[type=text],
+#popupForm input[type=password] {
+	min-width: 300px;
+	width: 300px;
+	-webkit-border-radius: 4px;
+	border: 3px solid
+	-webkit-box-shadow: 0px 1px 0px white;
+	padding: 6px;
+	font-size: 14px;
+}
+
+.popupFieldBlock label {
+	display: block;
+	padding-left: 3px;
+	margin-top: 12px;
+}
+
+.checkboxBlock {
+	margin-top: 15px;
+	padding-bottom: 5px;
+}
+
+.popupFieldBlock, .checkboxBlock {
+	margin-left: 26px;
+	padding-right:50px;
+}
+
+.popupSubmitBlock {
+	text-align:center;
+}
+
+.popupButton {
+	font-family: Helvetica, sans-serif;
+	font-size: 14px;
+	padding: 10px 30px 10px 30px;
+	margin-top: 14px;
+}
+
+.popupButton:hover {
+	cursor: pointer;
+}
+
+

@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Extend Web Search to Nuxeo DAM</title>
+		
+		<link rel="stylesheet" type="text/css" href="css/jqui-base/jquery.ui.all.css" />
+		<link rel="stylesheet" type="text/css" href="css/popup.css" />
+		<!--
+		<link rel="stylesheet" href="http://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css">
+		-->
+		
+
+		<!--
+			- JavaScript and HTML must be in separate files: see our Content Security
+			- Policy documentation[1] for details and explanation.
+			- [1]: http://developer.chrome.com/extensions/contentSecurityPolicy.html
+		 -->
+		<script src="scripts//3d-party/jquery-2.0.0.min.js"></script>
+		<script src="scripts//3d-party/jqueryui-1.10.3.min.js"></script>
+		<script src="scripts/utils.js"></script>		
+		<script src="scripts/nuxeo/NUXEO.js"></script>
+		<script src="popup.js"></script>
+	</head>
+	
+	<body class="popup">
+		<div id="accordion">
+			<h3>Nuxeo Connection</h3>
+				<div id="connectionInfos">
+					 <div id="bigError" class="bigError doHide">
+						An error orccured, the extension could not be initialized.<br>
+						(missing some JavaScript)
+					</div>
+					<div id="connectionError" class="connectionError doHide">
+						A connection error occured, can't reach the server.
+					</div>
+					<div id="askParams">
+						<form id="popupForm" name="popupForm" action="#">
+							<div>
+								<div class="enableCheckboxBlock doHide">
+									<input type="checkbox" id="enableSearch" name="enableSearch" tabindex="1"/>
+									<label for="enableSearch">Enable Search in Nuxeo</label>
+								</div>
+							</div>
+							<div id="main2">
+								<div>
+									<div class="popupFieldBlock main2">
+										<label id="nuxeoHostLabel" for="nuxeoHost">Nuxeo Server URL:</label>
+										<input type="text" id="nuxeoHost" name="nuxeoHost" tabindex="2"/>
+									</div>
+								</div>
+								<div>
+									<div class="popupFieldBlock main2">
+										<label for="login">Login:</label>
+										<input type="text" id="login" name="login" maxlength="50" tabindex="3"/>
+									</div>
+								</div>
+								<div>
+									<div class="popupFieldBlock main2">
+										<label for="password">Password:</label>
+										<input type="password" id="pwd" name="pwd" maxlength="50" tabindex="4"/>
+									</div>
+								</div>
+								<div>
+									<div class="checkboxBlock main2">
+										<input type="checkbox" id="rememberMe" name="rememberMe" tabindex="5"/>
+										<label for="rememberMe">Remember me</label>
+									</div>
+								</div>
+							</form>
+						</div>
+						<div>
+							<div class="popupSubmitBlock">
+								<button id="popupSubmit" name="popupSubmit" class="popupButton">Save</button>
+							</div>
+						</div>
+					</div><!-- askParams -->
+				</div><!-- connectionInfos -->
+				
+		  <h3 id="resutTitle">Result</h3>
+		  <div id="displayResults">
+		    <p>Sed non urna. Phasellus eu ligula. Vestibulum sit amet purus.
+		    Vivamus hendrerit, dolor aliquet laoreet, mauris turpis velit,
+		    faucibus interdum tellus libero ac justo.</p>
+		  </div>
+		</div><!-- accordion -->
+		
+	<!-- askParams is the div displaying the "get connection infos" div -->
+	<!-- Below, we have the div that displays the results -->
+	
+
+	</body>
+</html>
+
