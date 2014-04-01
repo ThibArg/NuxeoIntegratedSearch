@@ -20,7 +20,8 @@
 	"background": {
 		"persistent" : false,
 		"scripts": ["scripts/utils.js",
-					"scripts/nuxeo/NUXEO.js",
+					"scripts/nuxeo-utils.js",
+					"scripts/nuxeo/nuxeo.js",
 					"scripts/background/background-main.js"]
 	},
 	"permissions": [

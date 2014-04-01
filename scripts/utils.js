@@ -8,8 +8,7 @@ if(typeof UTILS !== 'undefined') {
 
 UTILS = {};
 
-UTILS.getKeywordsFromGoogleUrl = function (inUrl)
-{
+UTILS.getKeywordsFromGoogleUrl = function (inUrl) {
     var a, hashPos, queryStr, keywords, result;
 
 	result = {isGooglePage: false, keywords: "", host: ""};
@@ -38,16 +37,16 @@ UTILS.getKeywordsFromGoogleUrl = function (inUrl)
 	return result;
 }
 
-UTILS.pluralize = function(inNumber, inStrForZeroOrOne, inStrForMore) {
+UTILS.pluralize = function(inNumber, inStr01, inStrMore) {
 	var r = "";
-	if(typeof inNumber === "number" && typeof inStrForZeroOrOne === "string") {
+	if(typeof inNumber === "number" && typeof inStr01 === "string") {
 		if( inNumber >= -1 && inNumber <= 1) {
-			r = inNumber + " " + inStrForZeroOrOne
+			r = inNumber + " " + inStr01
 		} else {
 			if(typeof inStrForMore === "string") {
-				r = inNumber + " " + inStrForMore;
+				r = inNumber + " " + inStrMore;
 			} else {
-				r = inNumber + " " + inStrForZeroOrOne + "s";
+				r = inNumber + " " + inStr01 + "s";
 			}
 		}
 	}

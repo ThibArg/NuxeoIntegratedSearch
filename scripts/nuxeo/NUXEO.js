@@ -1,459 +1,1034 @@
-/**
- * NUXEO.js
- * 
- * TODO: Doc for WARNING about accessors ("remember" will save/remove params from the local storage for example)
- */
-if(typeof NUXEO !== 'undefined') {
-	console.log("[WARN] Nuxeo initialization called more than once");
-}
+var nuxeo = (function(nuxeo) {
 
-NUXEO = null;
+  if (typeof(log) === 'undefined') {
+    log = function() {};
+  }
 
-(function scope_NUXEO() {
-	"use strict";
-	
-	//--------------------------------------
-	//Constants
-	//--------------------------------------
-	// Using an object so toString() is easier to write
-	var K =  {
-		REST_PATTERN		: "/site/automation/",
-		QUERY_OPERATION		: "Document.Query",
-		QUERY_PICT_STATEMENT:     "SELECT * FROM Document WHERE ecm:mixinType IN ('Picture')"
-								+ " AND ecm:mixinType != 'HiddenInNavigation' AND ecm:isCheckedInVersion = 0"
-								+ " AND ecm:currentLifeCycleState != 'deleted'",
-		QUERY_LIMIT_DEFAULT	: 12,// 4 rows of 3 for example
-		QUERY_LIMIT_MAX		: 24,
-		LOGIN_PATH			: "site/automation/login",
-	
-	// Administrator/Administrator (for quick test)
-		TEST_LOCALHOST		: "http://localhost:8080/nuxeo",
-		TEST_LOGIN			: "Administrator",
-		TEST_PWD			: "Administrator",
-		TEST_B64_ADMIN		: "Basic QWRtaW5pc3RyYXRvcjpBZG1pbmlzdHJhdG9y",
-	
-		KEY_FOR_STORAGE		: "Nuxeo-IS"
-	};
-	
-	//--------------------------------------
-	// constructor and functions
-	//--------------------------------------
-	function _NUXEO() {
-		var _doDAMQuery = false,
-			_nuxeoHost = "",
-			_login = "",
-			_pwd = "",
-			_basicAuth = "",
-			_remember = false;
-	
-		//--------------------------------------
-		// Properties
-		//--------------------------------------
-		this.__defineGetter__('doDAMQuery', function() { return _doDAMQuery; });
-		this.__defineSetter__('doDAMQuery', function(inValue) { _doDAMQuery = inValue ? true : false; });
-		
-		this.__defineGetter__('nuxeoHost', function() { return _nuxeoHost; });
-		this.__defineSetter__('nuxeoHost', function(inValue) { _nuxeoHost = inValue ? true : false; });
-		
-		this.__defineGetter__('login', function() { return _login; });
-		this.__defineSetter__('login', function(inValue) {
-											if(typeof(inValue) === "string") {
-												_login = inValue;
-												_buildBasicAuth();
-											} else {
-												throw new TypeError("This property is a string");
-											}
-										});
-		
-		this.__defineGetter__('pwd', function() { return _pwd; });
-		this.__defineSetter__('pwd', function(inValue) {
-											if(typeof(inValue) === "string") {
-												_pwd = inValue;
-												_buildBasicAuth();
-											} else {
-												throw new TypeError("This property is a string");
-											}
-										});
+  function join() {
+    var args = Array.prototype.slice.call(arguments);
+    for(var i = args.length - 1; i >= 0; i--) {
+      if(args[i] === null || args[i] === undefined || (typeof args[i] == 'string'  && args[i].length === 0)) {
+        args.splice(i, 1);
+      }
+    }
+    var joined = args.join('/');
+    return joined.replace(/(^\/+)|([^:])\/\/+/g, '$2/');
+  }
 
-		this.__defineGetter__('remember', function() { return _remember; });
-		this.__defineSetter__('remember', function(inValue) {
-											_remember = inValue ? true : false;
-											if(_remember) {
-												_saveParams();
-											} else {
-												_removeSavedParams();
-											}
-										});
-		
-		// Constants
-		this.__defineGetter__('REST_PATTERN', function() { return K.REST_PATTERN; });
-		this.__defineGetter__('QUERY_OPERATION', function() { return K.QUERY_OPERATION; });
-		this.__defineGetter__('QUERY_PICT_STATEMENT', function() { return K.QUERY_PICT_STATEMENT; });
-		this.__defineGetter__('QUERY_LIMIT_DEFAULT', function() { return K.QUERY_LIMIT_DEFAULT; });
-		this.__defineGetter__('QUERY_LIMIT_MAX', function() { return K.QUERY_LIMIT_MAX; });
-		this.__defineGetter__('LOGIN_PATH', function() { return K.LOGIN_PATH; });
-		this.__defineGetter__('TEST_LOCALHOST', function() { return K.TEST_LOCALHOST; });
-		this.__defineGetter__('TEST_LOGIN', function() { return K.TEST_LOGIN; });
-		this.__defineGetter__('TEST_PWD', function() { return K.TEST_PWD; });
-		this.__defineGetter__('TEST_B64_ADMIN', function() { return K.TEST_B64_ADMIN; });
-		
-		this.__defineSetter__('REST_PATTERN', function(inValue) { throw new TypeError("This property is read-only"); });
-		this.__defineSetter__('QUERY_OPERATION', function(inValue) { throw new TypeError("This property is read-only"); });
-		this.__defineSetter__('QUERY_PICT_STATEMENT', function(inValue) { throw new TypeError("This property is read-only"); });
-		this.__defineSetter__('QUERY_LIMIT_DEFAULT', function(inValue) { throw new TypeError("This property is read-only"); });
-		this.__defineSetter__('QUERY_LIMIT_MAX', function(inValue) { throw new TypeError("This property is read-only"); });
-		this.__defineSetter__('LOGIN_PATH', function(inValue) { throw new TypeError("This property is read-only"); });
-		this.__defineSetter__('TEST_LOCALHOST', function(inValue) { throw new TypeError("This property is read-only"); });
-		this.__defineSetter__('TEST_B64_ADMIN', function(inValue) { throw new TypeError("This property is read-only"); });
-				
-		//--------------------------------------
-		//Private functions
-		//--------------------------------------
-		/**
-		 * _setRESTQueryHeaders
-		 *
-		 * @param {string} inReq The XHR object to update
-		 * @param {string} inMoreHeaders Added with a call to the regular setRequestHeader() XHR API
-		 *
-		 * @private
-		 */
-		function _setRESTQueryHeaders(inReq, inMoreHeaders) {
-	
-			inReq.setRequestHeader("Content-Type", "application/json+nxrequest");
-			inReq.setRequestHeader("Accept", "application/json+nxentity, */*");
-			// see http://doc.nuxeo.com/display/NXDOC/REST+API
-			// Here we want no data from the document (just uid, path and title),
-			// so we don't use the X-NXDocumentProperties header.
-			// To get all avilable fields for a document:
-			//inReq.setRequestHeader("X-NXDocumentProperties", "*");
-		
-			if(_basicAuth !== "") {
-				inReq.setRequestHeader("Authorization", _basicAuth);
-			}
-			if(inMoreHeaders.length > 0) {
-				inMoreHeaders.forEach( function(inElt) {
-					inReq.setRequestHeader(inElt.header, inElt.value);
-				});
-			}
-		} //_setRESTQueryHeaders
-	
-		/**
-		 * _getRESTQueryParams
-		 * Build the request body, as expected by the Document.Query REST operation
-		 *
-		 * @param {string} inKeywords, the words to full-text query
-		 * @param {boolean} inAsText. If true, the JSON.stringify value is returned, else it's the JSON object itself
-		 *
-		 * @private
-		 */
-		function _getRESTQueryParams(inKeywords, inLimit, inAsText) {
-			var params = {	params: { query: K.QUERY_PICT_STATEMENT },
-							context: {}
-						};
-			
-			if(typeof inKeywords === "string" && inKeywords !== '') {
-				params.params.query += " AND ecm:fulltext = '" + inKeywords + "'";
-			}
-		
-			if(typeof(inLimit) === "number" && inLimit > 0) {
-				if(inLimit > K.QUERY_LIMIT_MAX) {
-					inLimit = K.QUERY_LIMIT_MAX;
-				}
-				
-			} else {
-				inLimit = K.QUERY_LIMIT_DEFAULT;
-			}
-			params.params.query += " LIMIT " + inLimit;
-		
-			if(typeof inAsText === 'boolean' && inAsText) {
-				return JSON.stringify(params);
-			} else {	
-				return params;
-			} 
-		} // _getRESTQueryParams
-		
-		/**
-		 * _buildBasicAuth
-		 *
-		 * @private
-		 */
-		function _buildBasicAuth() {
-			_basicAuth = "";
-			if(_login !== "") {
-				_basicAuth = "Basic " + btoa(_login + ":" + _pwd);
-			}
-		}
-		
-		/**
-		 * _poorManStringXOR
-		 * Just to obfuscate a bit the stored password
-		 * As it's an XOR operation:
-		 * 	- It's called "poorMan" ;->
-		 *  - The same sring can be alternatively retreived by calling _poorManStringXOR
-		 * 
-		 * 
-		 * @param {string} inStr, the string to xor.
-		 * 
-		 */
-		function _poorManStringXOR(inStr) {
-			var result = "";
-			var key = 12;
-			for(var i = 0; i < inStr.length; i++) {
-				result += String.fromCharCode(key ^ inStr.charCodeAt(i));
-			}
+  var DEFAULT_CLIENT_OPTIONS = {
+    baseURL: '/nuxeo',
+    restPath: 'site/api/v1',
+    automationPath: 'site/automation',
+    username: null,
+    password: null,
+    timeout: 3000
+  };
 
-			return result;
-		}
-		
-		/**
-		 * _loadSavedParams
-		 * Loads persistent data
-		 */
-		function _loadSavedParams() {
-			
-			_nuxeoHost = "";
-			_login = "";
-			_pwd = "";
-			_basicAuth = "";
-			_doDAMQuery = false;
-			_remember = false;
-			
-			try {
-				var values = JSON.parse( window.localStorage[K.KEY_FOR_STORAGE] );
-				
-				if(values) {
-					if("nuxeoHost" in values && typeof values.nuxeoHost === "string") {
-						_nuxeoHost = values.nuxeoHost;
-					}
+  var Client = function(options) {
+    options = jQuery.extend(true, {}, DEFAULT_CLIENT_OPTIONS, options || {});
+    this._baseURL = options.baseURL;
+    this._restURL = join(this._baseURL, options.restPath);
+    this._automationURL = join(this._baseURL, options.automationPath);
+    this._username = options.username;
+    this._password = options.password;
+    this._repositoryName = options.repositoryName || 'default';
+    this._schemas = options.schemas || [];
+    this._headers = options.headers || {};
+    this._timeout = options.timeout;
+    this.connected = false;
+  };
 
-					if("login" in values && typeof values.login === "string") {
-						_login = values.login;
-					}
+  Client.prototype.connect = function(callback) {
+    var self = this;
 
-					if("pwd" in values && typeof values.pwd === "string") {
-						_pwd = _poorManStringXOR(values.pwd);
-					}
+    var headers = {
+      'Accept': 'application/json'
+    };
+    var xhrFields = {};
+    if (this._username && this._password) {
+      headers['Authorization'] = 'Basic ' + btoa(this._username + ':' + this._password);
+      xhrFields = {
+        withCredentials: true
+      }
+    }
 
-					if("doDAMQuery" in values && typeof values.doDAMQuery === "boolean") {
-						_doDAMQuery = values.doDAMQuery;
-					}
-					_remember = true; // We had values, so we wanted to remember
-					_buildBasicAuth();
-				}
-				
-			} catch(e) {
-				// No values or pb in storage
-			}
-		}
+    jQuery.ajax({
+      type: 'POST',
+      url: join(this._automationURL, 'login'),
+      headers: headers,
+      xhrFields: xhrFields
+    })
+      .done(function(data, textStatus, jqXHR) {
+        if (data['entity-type'] === 'login' && data['username'] === self._username) {
+          self.connected = true;
+          if (callback) {
+            callback(null, self)
+          }
+        } else {
+          if (callback) {
+            callback(data, self)
+          }
+        }
+      })
+      .fail(function(jqXHR, textStatus, errorThrown) {
+        if (callback) {
+          callback(errorThrown, self)
+        }
+      });
+  };
+  Client.prototype.header = function(name, value) {
+    this._headers[name] = value;
+    return this;
+  };
 
-		/**
-		 * _saveParams
-		 * We don't try-catch. It's bad.
-		 */
-		function _saveParams() {
-			window.localStorage.setItem(K.KEY_FOR_STORAGE,
-										JSON.stringify({
-											nuxeoHost		: _nuxeoHost,
-											login			: _login,
-											pwd				: _poorManStringXOR(_pwd),
-											doDAMQuery		: _doDAMQuery
-										}) );
-		}
-		
-		/**
-		 * _removeSavedParams
-		 * 
-		 */
-		function _removeSavedParams() {
-			window.localStorage.removeItem(K.KEY_FOR_STORAGE);
-		}
-		
-		
-		//--------------------------------------
-		//Instance methods
-		//--------------------------------------
-		/**
-		 * toString
-		 * Mainly for quick debug/check values
-		 */
-		this.toString = function() {
-			return JSON.stringify (
-				{	constants	: K,
-				
-					_doDAMQuery	: _doDAMQuery,
-					_nuxeoHost	: _nuxeoHost,
-					_login		: _login,
-					_pwd		: -pwd
-				});
-		};
-		
-		this.getTestValues = function() {
-			return { nuxeoHost	: K.TEST_LOCALHOST,
-					 login		: K.TEST_LOGIN,
-					 pwd		: K.TEST_PWD
-					};
-		};
-		
-		/**
-		 * queryDAM
-		 * Does the query (setup headers, body, callbacks, ...)
-		 *
-		 * @param {object}	inOptions, all the different parameters (embedded in an object):
-		 *	moreHeaders: Array of headers to add to the request - OPTIONNAL
-		 *	keywords: String, the keywords to query. OPTIONNAL
-		 *	limit: used for SELECT.... LIMIT. Optionnal. Max will be _LIMIT_MAX
-		 *	onSuccess:	Function, called for XHR.onload. MANDATORY
-		 *				Receives the response from NUxeo as JSON: receives JSON.parse( response.target.responseText) )
-		 *				The code tests the status code. If it's not 200, then the
-		 *				onError callback is called.
-		 *	onError: Function, called for HXR.onerror. OPTIONNAL (but recommended)
-		 *			Receives the HXR response as JSON
-		 */
-		this.queryDAM = function(inOptions) {
-			var xhr,
-				goOn = false,
-				hasBasicAuth,
-				moreHeaders, hasMoreHeaders,
-				keywords,
-				limit,
-				successCB, errorCB, hasErrorCB;
-			
-			// Get the params
-			keywords = "";
-			if("keywords" in inOptions) {
-				keywords = inOptions.keywords;
-			}
-			
-			limit = 0;
-			if("limit" in inOptions) {
-				limit = inOptions.limit;
-			}
-			
-			moreHeaders = [];
-			if(    "moreHearers" in inOptions
-				&& typeof inOptions.moreHeaders === "object"
-				&& Array.isArray(inOptions.moreHeaders) ) {
-				moreHearers = inOptions.moreHeaders;	
-			}
-			hasMoreHeaders = moreHeaders.length > 0;
-			
-			successCB = "onSuccess" in inOptions ? inOptions.onSuccess : null;
-			errorCB = "onError" in inOptions ? inOptions.onError : null;
-			hasErrorCB = typeof errorCB  === "function";
-			hasBasicAuth = _basicAuth !== "";
-			
-			// Errorcheck
-			if(typeof _nuxeoHost !== "string" || _nuxeoHost === "") {
-				throw new TypeError("URL is invalid");
-			} else if(!hasBasicAuth && !hasMoreHeaders) {
-				throw new TypeError("Missing authentication");
-			} else if(typeof successCB !== "function") {
-				throw new TypeError("inSuccessCB should be a function");
-			} else {
-				goOn = true;
-			}
-			
-			// Query
-			if(this.doDAMQuery && goOn) {
-				xhr = new XMLHttpRequest();
+  Client.prototype.headers = function(headers) {
+    this._headers = jQuery.extend(true, {}, this._headers, headers);
+    return this;
+  };
 
-				xhr.open("POST", _nuxeoHost + K.REST_PATTERN + K.QUERY_OPERATION, true);
-				
-				xhr.onload = function(inEvt) {
-					if(inEvt.target.status === 200) {
-						if(inEvt.target.responseText !== "") {
-							successCB( JSON.parse(inEvt.target.responseText) );
-						}
-					} else {
-						if(hasErrorCB) {
-							errorCB( inEvt );
-						}
-					}
-				}
-				if(hasErrorCB) {
-					xhr.onerror = function(inEvt) {
-						errorCB( inEvt );
-					}
-				}
-				
-				_setRESTQueryHeaders(xhr, hasMoreHeaders ? moreHeaders : []);
+  Client.prototype.timeout = function(timeout) {
+    this._timeout = timeout;
+    return this;
+  };
 
-				xhr.send( _getRESTQueryParams(keywords, limit, true) );
-			}
-		}; // queryDAM
-		
-		/**
-		 * readyForQuery
-		 * 
-		 */
-		this.readyToQuery = function() {
-			return _doDAMQuery && _nuxeoHost !== "" && _login !== "" && _pwd !== "";
-		};	
-		
-		/**
-		 * needsConnectionInfos
-		 * 
-		 */
-		this.needsConnectionInfos = function() {
-			return _nuxeoHost === "" || _login === "" || _pwd === "";
-		};
-		
+  Client.prototype.repositoryName = function(repositoryName) {
+    this._repositoryName = repositoryName;
+    return this;
+  };
 
-		/**
-		 * getParams
-		 * 
-		 */
-		this.getParams = function() {
-			return { nuxeoHost	: _nuxeoHost,
-					 login		: _login,
-					 pwd		: _pwd,
-					 doDAMQuery : _doDAMQuery,
-					 remember	: _remember
-					};
-		};
-		
-		/**
-		 * setParams
-		 * 
-		 */
-		this.setParams = function(inNuxeoHost, inLogin, inPwd, inRemember) {
-			
-			/* . . . ERROR CHECK PARAMETERS . . . */
-			
-			_nuxeoHost = inNuxeoHost;
-			if(_nuxeoHost[ _nuxeoHost.length - 1 ] === "/") {
-				_nuxeoHost = _nuxeoHost.substring(0, _nuxeoHost.length - 1);
-			}
-			_login = inLogin;
-			_pwd = inPwd;
-			_remember = inRemember;
-			
-			_buildBasicAuth();
-			
-			if(inRemember) {
-				_saveParams();
-			} else {
-				_removeSavedParams();
-			}
-		};
-		
-		// All declared, time to initialized self
-		_loadSavedParams();
+  Client.prototype.schema = function(schema) {
+    this._schemas.push(schema);
+    return this;
+  };
 
-	} // function _NUXEO()
-	
-	//--------------------------------------
-	//Class methods
-	//--------------------------------------
-	/*
-	_NUXEO.doThis = function(p1, p2) {
-	
-	}
-	*/
-	
-	NUXEO = new _NUXEO();
+  Client.prototype.schemas = function(schemas) {
+    this._schemas.push.apply(this._schemas, schemas);
+    return this;
+  };
 
-}());
+  Client.prototype.fetchOperationDefinitions = function(callback) {
+    var headers = {
+      'Accept': 'application/json'
+    };
+    var xhrFields = {};
+    if (this._username && this._password) {
+      headers['Authorization'] = 'Basic ' + btoa(this._username + ':' + this._password);
+      xhrFields = {
+        withCredentials: true
+      }
+    }
 
-// --EOF--
- 
+    jQuery.ajax({
+      type: 'GET',
+      url: this._automationURL,
+      headers: headers,
+      xhrFields: xhrFields
+    })
+      .done(function (data, textStatus, jqXHR) {
+        if (callback) {
+          callback(null, data, jqXHR);
+        }
+      })
+      .fail(function (jqXHR, textStatus, errorThrown) {
+        if (callback) {
+          callback(errorThrown, null, jqXHR);
+        }
+      });
+  };
+
+  Client.prototype.operation = function(id) {
+    return new Operation( {
+      id: id,
+      url: this._automationURL,
+      username: this._username,
+      password: this._password,
+      timeout: this._timeout,
+      repositoryName: this._repositoryName,
+      schemas: this._schemas,
+      headers: this._headers
+    });
+  };
+
+  Client.prototype.request = function(path) {
+    return new Request({
+      url: this._restURL,
+      username: this._username,
+      password: this._password,
+      path: path,
+      timeout: this._timeout,
+      repositoryName: this._repositoryName,
+      schemas: this._schemas,
+      headers: this._headers
+    });
+  };
+
+  Client.prototype.document = function(data) {
+    return new Document({
+      client: this,
+      data: data,
+      timeout: this._timeout,
+      repositoryName: this._repositoryName,
+      schemas: this._schemas,
+      headers: this._headers
+    });
+  };
+
+  Client.prototype.uploader = function(options) {
+    options = jQuery.extend(true, options,  {
+      automationURL: this._automationURL,
+      username: this._username,
+      password: this._password,
+      data: data,
+      timeout: this._timeout,
+      repositoryName: this._repositoryName,
+      headers: this._headers
+    })
+    return new Uploader(options);
+  };
+
+  nuxeo.Client = Client;
+
+
+  var Operation = function(options) {
+    this._id = options.id;
+    this._url = options.url;
+    this._username = options.username;
+    this._password = options.password;
+    this._timeout = options.timeout;
+    this._overrideMimeType = options.overrideMimeType;
+    this._repositoryName = options.repositoryName;
+    this._schemas = [].concat(options.schemas);
+    this._headers = options.headers || {};
+    this._automationParams = {
+      params: {},
+      context: {},
+      input: undefined
+    };
+
+    this.header('X-NXVoidOperation', false);
+  };
+
+  Operation.prototype.timeout = function(timeout) {
+    this._timeout = timeout;
+    return this;
+  };
+
+  Operation.prototype.overrideMimeType = function(overrideMimeType) {
+    this._overrideMimeType = overrideMimeType;
+    return this;
+  };
+
+  Operation.prototype.header = function(name, value) {
+    this._headers[name] = value;
+    return this;
+  };
+
+  Operation.prototype.headers = function(headers) {
+    this._headers = jQuery.extend(true, {}, this._headers, headers);
+    return this;
+  };
+
+  Operation.prototype.repositoryName = function(repositoryName) {
+    this._repositoryName = repositoryName;
+    return this;
+  };
+
+  Operation.prototype.schema = function(schema) {
+    this._schemas.push(schema);
+    return this;
+  };
+
+  Operation.prototype.schemas = function(schemas) {
+    this._schemas.push.apply(this._schemas, schemas);
+    return this;
+  };
+
+  Operation.prototype.param = function(name, value) {
+    this._automationParams.params[name] = value;
+    return this;
+  };
+
+  Operation.prototype.params = function(params) {
+    this._automationParams.params = jQuery.extend(true, {}, this._automationParams.params, params);
+    return this;
+  };
+
+  Operation.prototype.context = function(context) {
+    this._automationParams.context = context;
+    return this;
+  };
+
+  Operation.prototype.input = function(input) {
+    this._automationParams.input = input;
+    return this;
+  };
+
+  Operation.prototype.voidOperation = function(voidOperation) {
+    this.header('X-NXVoidOperation', voidOperation);
+    return this;
+  };
+
+  Operation.prototype.execute = function(options, callback) {
+    function getOperationURL(url, operationId) {
+      if (url.indexOf('/', url.length - 1) == -1) {
+        url += '/';
+      }
+      url += operationId;
+      return url;
+    }
+
+    if (typeof options === 'function') {
+      // no options
+      callback = options;
+      options = {};
+    }
+    options = options || {};
+
+    var headers = jQuery.extend(true, {}, this._headers);
+    headers['Nuxeo-Transaction-Timeout'] = 5 + (this._timeout / 1000) | 0;
+    if (this._schemas.length > 0) {
+      headers['X-NXDocumentProperties'] = this._schemas.join(',');
+    }
+    if (this._repositoryName !== undefined) {
+      headers['X-NXRepository'] = this._repositoryName;
+    }
+    headers = jQuery.extend(true, headers, options.headers || {});
+
+    var xhrFields = {};
+    if (this._username && this._password) {
+      headers['Authorization'] = 'Basic ' + btoa(this._username + ':' + this._password);
+      xhrFields = {
+        withCredentials: true
+      }
+    }
+
+    var self = this;
+    var xhrParams = {
+      type: 'POST',
+      timeout: this._timeout,
+      headers: headers,
+      url: getOperationURL(this._url, this._id),
+      xhrFields: xhrFields,
+      beforeSend: function(xhr) {
+        if (self._overrideMimeType) {
+          xhr.overrideMimeType(self._overrideMimeType);
+        }
+      }
+    };
+
+    if (typeof this._automationParams.input === 'object') {
+      // multipart
+      var automationParams = {
+        params : this._automationParams.params,
+        context : this._automationParams.context
+      };
+
+      var formData = new FormData();
+      var params = new Blob([ JSON.stringify(automationParams) ], {
+        'type' : 'application/json+nxrequest'
+      });
+      formData.append('request', params, 'request');
+      formData.append(options.filename, this._automationParams.input, options.filename);
+
+      xhrParams.data = formData;
+      xhrParams.processData = false;
+      xhrParams.contentType = 'multipart/form-data';
+    } else {
+      xhrParams.data = JSON.stringify(this._automationParams);
+      xhrParams.contentType = 'application/json+nxrequest';
+    }
+
+    jQuery.ajax(xhrParams)
+      .done(function (data, textStatus, jqXHR) {
+        if (callback) {
+          callback(null, data, jqXHR)
+        }
+      })
+      .fail(function (jqXHR, textStatus, errorThrown) {
+        if (callback) {
+          callback(errorThrown, null, jqXHR)
+        }
+      });
+  };
+
+  Operation.prototype.uploader = function(options) {
+    options = jQuery.extend(true, {}, options, {
+      operationId: this._id,
+      url: this._url,
+      username: this._username,
+      password: this._password,
+      timeout: this._timeout,
+      repositoryName: this._repositoryName,
+      headers: this._headers,
+      automationParams: this._automationParams
+    });
+    if (!this._uploader) {
+      this._uploader = new Uploader(options)
+    }
+    return this._uploader;
+  };
+
+
+  var Request = function(options) {
+    this._path = options.path || '';
+    this._url = options.url;
+    this._username = options.username;
+    this._password = options.password;
+    this._timeout = options.timeout;
+    this._overrideMimeType = options.overrideMimeType;
+    this._repositoryName = options.repositoryName;
+    this._schemas = [].concat(options.schemas);
+    this._headers = options.headers || {};
+    this._query = options.query || {};
+  };
+
+  Request.prototype.timeout = function(timeout) {
+    this._timeout = timeout;
+    return this;
+  };
+
+  Request.prototype.overrideMimeType = function(overrideMimeType) {
+    this._overrideMimeType = overrideMimeType;
+    return this;
+  };
+
+  Request.prototype.header = function(name, value) {
+    this._headers[name] = value;
+    return this;
+  };
+
+  Request.prototype.headers = function(headers) {
+    this._headers = jQuery.extend(true, {}, this._headers, headers);
+    return this;
+  };
+
+  Request.prototype.repositoryName = function(repositoryName) {
+    this._repositoryName = repositoryName;
+    return this;
+  };
+
+  Request.prototype.schema = function(schema) {
+    this._schemas.push(schema);
+    return this;
+  };
+
+  Request.prototype.schemas = function(schemas) {
+    this._schemas.push.apply(this._schemas, schemas);
+    return this;
+  };
+
+  Request.prototype.query = function(query) {
+    this._query = jQuery.extend(true, {}, this._query, query);
+    return this;
+  };
+
+  Request.prototype.path = function(path) {
+    this._path = join(this._path, path);
+    return this;
+  };
+
+  Request.prototype.get = function(options, callback) {
+    if (typeof options === 'function') {
+      // no options
+      callback = options;
+      options = {};
+    }
+    options = jQuery.extend(true, {}, options, {
+      method: 'get'
+    });
+    this.execute(options, callback);
+  };
+
+  Request.prototype.post = function(options, callback) {
+    if (typeof options === 'function') {
+      // no options
+      callback = options;
+      options = {};
+    }
+    this.headers({ 'Content-Type': 'application/json' });
+    if (options.data && typeof options.data !== 'string') {
+      options.data = JSON.stringify(options.data);
+    }
+    options = jQuery.extend(true, options, {
+      method: 'post'
+    });
+    this.execute(options, callback);
+  };
+
+  Request.prototype.put = function(options, callback) {
+    if (typeof options === 'function') {
+      // no options
+      callback = options;
+      options = {};
+    }
+    this.headers({ 'Content-Type': 'application/json' });
+    if (options.data && typeof options.data !== 'string') {
+      options.data = JSON.stringify(options.data);
+    }
+    options = jQuery.extend(true, options, {
+      method: 'put'
+    });
+    this.execute(options, callback);
+  };
+
+  Request.prototype.delete = function(options, callback) {
+    if (typeof options === 'function') {
+      // no options
+      callback = options;
+      options = {};
+    }
+    options = jQuery.extend(true, options, {
+      method: 'delete'
+    });
+    this.execute(options, callback);
+  };
+
+  Request.prototype.execute = function(options, callback) {
+    if (typeof options === 'function') {
+      // no options
+      callback = options;
+      options = {};
+    }
+    options = options || {};
+    options.method = options.method || 'get';
+
+    var headers = jQuery.extend(true, {}, this._headers);
+    headers['Accept'] = 'application/json';
+    headers['Nuxeo-Transaction-Timeout'] = 5 + (this._timeout / 1000) | 0;
+    if (this._schemas.length > 0) {
+      headers['X-NXDocumentProperties'] = this._schemas.join(',');
+    }
+    headers = jQuery.extend(true, headers, options.headers || {});
+
+    // stringify if needed
+    if (headers['Content-Type'] === 'application/json') {
+      if (options.data && typeof options.data === 'object') {
+        options.data = JSON.stringify(options.data);
+      }
+    }
+
+    // query params
+    var query = jQuery.extend(true, {}, this._query);
+    query = jQuery.extend(true, query, options.query || {});
+
+    var path = '';
+    if (this._repositoryName !== undefined) {
+      path = join('repo', this._repositoryName);
+    }
+    path = join(path, this._path);
+    var data = options.data || query;
+
+    var xhrFields = {};
+    if (this._username && this._password) {
+      headers['Authorization'] = 'Basic ' + btoa(this._username + ':' + this._password);
+      xhrFields = {
+        withCredentials: true
+      }
+    }
+
+    var xhrParams = {
+      type: options.method,
+      timeout: this._timeout,
+      headers: headers,
+      data: data,
+      url: join(this._url, path),
+      xhrFields: xhrFields,
+      beforeSend: function(xhr) {
+        if (self._overrideMimeType) {
+          xhr.overrideMimeType(self._overrideMimeType);
+        }
+      }
+    };
+
+    jQuery.ajax(xhrParams)
+      .done(function (data, textStatus, jqXHR) {
+        if (callback) {
+          callback(null, data, jqXHR)
+        }
+      })
+      .fail(function (jqXHR, textStatus, errorThrown) {
+        if (callback) {
+          callback(errorThrown, null, jqXHR)
+        }
+      });
+  };
+
+  var Document = function(options) {
+    this._client = options.client;
+    this._timeout = options.timeout;
+    this._repositoryName = options.repositoryName;
+    this._schemas = [].concat(options.schemas);
+    this._headers = options.headers || {};
+    this.properties = {};
+    this.dirtyProperties = {};
+
+    var data = options.data;
+    if (typeof data === 'string') {
+      // id or path ref
+      if (data.indexOf('/') === 0) {
+        this.path = data;
+      } else {
+        this.uid = data;
+      }
+    } else if (typeof data === 'object') {
+      // JSON doc
+      jQuery.extend(true, this, data);
+    } else {
+      // unsupported
+      throw new Error();
+    }
+  };
+
+  Document.prototype.timeout = function(timeout) {
+    this._timeout = timeout;
+    return this;
+  };
+
+  Document.prototype.header = function(name, value) {
+    this._headers[name] = value;
+    return this;
+  };
+
+  Document.prototype.headers = function(headers) {
+    this._headers = jQuery.extend(true, {}, this._headers, headers);
+    return this;
+  };
+
+  Document.prototype.repositoryName = function(repositoryName) {
+    this.repository = repositoryName;
+    return this;
+  };
+
+  Document.prototype.schema = function(schema) {
+    this._schemas.push(schema);
+    return this;
+  };
+
+  Document.prototype.schemas = function(schemas) {
+    this._schemas.push.apply(this._schemas, schemas);
+    return this;
+  };
+
+  Document.prototype.adapter = function(adapter) {
+    this._adapter = adapter;
+    return this;
+  };
+
+  Document.prototype.set = function(properties) {
+    this.dirtyProperties = jQuery.extend(true, {}, this.dirtyProperties, properties);
+    this.properties = jQuery.extend(true, {}, this.properties, properties);
+    return this;
+  };
+
+  Document.prototype.fetch = function(callback) {
+    var self = this;
+    var path = this.uid !== undefined ? join('id', this.uid) : join('path', this.path);
+    if (this._adapter !== undefined) {
+      path = join(path, '@bo', this._adapter);
+    }
+    var request = this._client.request(path);
+    request.timeout(this._timeout).schemas(this._schemas).headers(this._headers)
+      .repositoryName(this.repository);
+    request.get(function(error, data, response) {
+      if (data !== undefined && typeof data === 'object'
+        && data['entity-type'] === 'document') {
+        data = self._client.document(data);
+      }
+      if (callback) {
+        callback(error, data, response);
+      }
+    });
+  };
+
+  Document.prototype.create = function(data, callback) {
+    var self = this;
+    var path = this.uid !== undefined ? join('id', this.uid) : join('path', this.path);
+    if (this._adapter !== undefined) {
+      path = join(path, '@bo', this._adapter, data.name);
+    }
+    var request = this._client.request(path);
+    request.timeout(this._timeout).schemas(this._schemas).headers(this._headers)
+      .repositoryName(this.repository);
+    request.post({ data: data }, function(error, data, response) {
+      if (data !== undefined && typeof data === 'object'
+        && data['entity-type'] === 'document') {
+        data = self._client.document(data);
+      }
+      if (callback) {
+        callback(error, data, response);
+      }
+    });
+  };
+
+  Document.prototype.update = function(data, callback) {
+    var self = this;
+    var path = this.uid !== undefined ? join('id', this.uid) : join('path', this.path);
+    if (this._adapter !== undefined) {
+      path = join(path, '@bo', this._adapter);
+    }
+    var request = this._client.request(path);
+    request.timeout(this._timeout).schemas(this._schemas).headers(this._headers)
+      .repositoryName(this.repository);
+    request.put({ data: data }, function(error, data, response) {
+      if (data !== undefined && typeof data === 'object'
+        && data['entity-type'] === 'document') {
+        data = self._client.document(data);
+      }
+      if (callback) {
+        callback(error, data, response);
+      }
+    });
+  };
+
+  Document.prototype.delete = function(callback) {
+    var self = this;
+    var path = this.uid !== undefined ? join('id', this.uid) : join('path', this.path);
+    var request = this._client.request(path);
+    request.timeout(this._timeout).schemas(this._schemas).headers(this._headers).repositoryName(this.repository);
+    request.delete(function(error, data, response) {
+      if (data !== undefined && typeof data === 'object'
+        && data['entity-type'] === 'document') {
+        data = self._client.document(data);
+      }
+      if (callback) {
+        callback(error, data, response);
+      }
+    });
+  };
+
+  Document.prototype.save = function(callback) {
+    this.update({
+      uid: this.uid,
+      properties: this.dirtyProperties
+    }, callback);
+  };
+
+  Document.prototype.children = function(callback) {
+    var self = this;
+    var path = this.uid !== undefined ? join('id', this.uid) : join('path', this.path);
+    path = join(path, '@children');
+    var request = this._client.request(path);
+    request.timeout(this._timeout).schemas(this._schemas).headers(this._headers)
+      .repositoryName(this.repository);
+    request.get(function(error, data, response) {
+      if (data !== undefined && typeof data === 'object'
+        && data['entity-type'] === 'document') {
+        data = self._client.document(data);
+      }
+      if (callback) {
+        callback(error, data, response);
+      }
+    });
+  };
+
+
+  var DEFAULT_UPLOADER_OPTIONS = {
+    numConcurrentUploads: 5,
+    // define if upload should be triggered directly
+    directUpload: true,
+    // update upload speed every second
+    uploadRateRefreshTime : 1000,
+    batchStartedCallback: function(batchId) {
+    },
+    batchFinishedCallback: function(batchId) {
+    },
+    uploadStartedCallback: function(fileIndex, file) {
+    },
+    uploadFinishedCallback: function(fileIndex, file, time) {
+    },
+    uploadProgressUpdatedCallback: function(fileIndex, file, newProgress) {
+    },
+    uploadSpeedUpdatedCallback: function(fileIndex, file, speed) {
+    }
+  };
+
+
+  var Uploader = function(options) {
+    options = jQuery.extend(true, {}, DEFAULT_UPLOADER_OPTIONS, options || {});
+    this._url = options.url;
+    this._username = options.username;
+    this._password = options.password;
+    this._operationId = options.operationId;
+    this._automationParams = {
+      params: {},
+      context: {},
+      input: undefined
+    };
+    this._automationParams = jQuery.extend(true, this._automationParams, options.automationParams || {});
+    this._numConcurrentUploads = options.numConcurrentUploads;
+    this._directUpload = options.directUpload;
+    this._uploadRateRefreshTime = options.uploadRateRefreshTime;
+    this._batchStartedCallback = options.batchFinishedCallback;
+    this._batchFinishedCallback = options.batchFinishedCallback;
+    this._uploadStartedCallback = options.uploadStartedCallback;
+    this._uploadFinishedCallback = options.uploadFinishedCallback;
+    this._uploadProgressUpdatedCallback = options.uploadProgressUpdatedCallback;
+    this._uploadSpeedUpdatedCallback = options.uploadSpeedUpdatedCallback;
+    this._timeout = options.timeout;
+    this._repositoryName = options.repositoryName;
+    this._headers = options.headers || {};
+    this._sendingRequestsInProgress = false;
+    this._uploadStack = [];
+    this._uploadIndex = 0;
+    this._nbUploadInProgress = 0;
+    this._completedUploads = [];
+
+    this.batchId = 'batch-' + new Date().getTime() + '-'
+      + Math.floor(Math.random() * 100000);
+    this._automationParams.params['operationId'] = this._operationId;
+    this._automationParams.params['batchId'] = this.batchId;
+  };
+
+  Uploader.prototype.timeout = function(timeout) {
+    this._timeout = timeout;
+    return this;
+  };
+
+  Uploader.prototype.header = function(name, value) {
+    this._headers[name] = value;
+    return this;
+  };
+
+  Uploader.prototype.headers = function(headers) {
+    this._headers = jQuery.extend(true, {}, this._headers, headers);
+    return this;
+  };
+
+  Uploader.prototype.repositoryName = function(repositoryName) {
+    this._repositoryName = repositoryName;
+    return this;
+  };
+
+  Uploader.prototype.uploadFile = function(file, callback) {
+    if (callback) {
+      file.callback = callback;
+    }
+    this._uploadStack.push(file);
+    if (this._directUpload && !this._sendingRequestsInProgress) {
+      this.uploadFiles();
+    }
+  };
+
+  Uploader.prototype.uploadFiles = function() {
+    var self = this;
+    if (this._nbUploadInProgress >= this._numConcurrentUploads) {
+      this._sendingRequestsInProgress = false;
+      log('delaying upload for next file(s) ' + this._uploadIndex
+        + '+ since there are already ' + this._nbUploadInProgress
+        + ' active uploads');
+      return;
+    }
+
+    this._batchStartedCallback(this.batchId);
+
+    this._sendingRequestsInProgress = true;
+    while (this._uploadStack.length > 0) {
+      var file = this._uploadStack.shift();
+      // create a new xhr object
+      var xhr = new XMLHttpRequest();
+      var upload = xhr.upload;
+      upload.fileIndex = this._uploadIndex + 0;
+      upload.fileObj = file;
+      upload.downloadStartTime = new Date().getTime();
+      upload.currentStart = upload.downloadStartTime;
+      upload.currentProgress = 0;
+      upload.startData = 0;
+      upload.batchId = this.batchId;
+
+      // add listeners
+      upload.addEventListener('progress', function(event) {
+        self._progress(event)
+      }, false);
+
+      if (file.callback) {
+        upload.callback = file.callback;
+      }
+
+      // The 'load' event doesn't work correctly on WebKit (Chrome,
+      // Safari),
+      // it fires too early, before the server has returned its response.
+      // still it is required for Firefox
+      if (navigator.userAgent.indexOf('Firefox') > -1) {
+        upload.addEventListener('load', function(event) {
+          log('trigger load');
+          log(event);
+          this._load(event.target)
+        }, false);
+      }
+
+      // on ready state change is not fired in all cases on webkit
+      // - on webkit we rely on progress lister to detected upload end
+      // - but on Firefox the event we need it
+      xhr.onreadystatechange = (function(xhr) {
+        return function() {
+          self._readyStateChange(xhr)
+        }
+      })(xhr);
+
+      // compute timeout in seconds and integer
+      var uploadTimeoutS = 5 + (this._timeout / 1000) | 0;
+      var targetUrl = join(this._url, 'batch/upload');
+
+      log('starting upload for file ' + this._uploadIndex);
+      xhr.open('POST', targetUrl);
+      xhr.setRequestHeader('Cache-Control', 'no-cache');
+      xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+      xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
+      xhr.setRequestHeader('X-File-Size', file.size);
+      xhr.setRequestHeader('X-File-Type', file.type);
+      xhr.setRequestHeader('X-Batch-Id', this.batchId);
+      xhr.setRequestHeader('X-File-Idx', this._uploadIndex);
+      xhr.setRequestHeader('Nuxeo-Transaction-Timeout', uploadTimeoutS);
+
+      if (this._username && this._password) {
+        xhr.setRequestHeader('Authorization', 'Basic ' + btoa(this._username + ':' + this._password));
+      }
+
+      this._nbUploadInProgress++;
+      this._uploadStartedCallback(this._uploadIndex, file);
+      this._uploadIndex++;
+
+      xhr.send(file);
+
+      if (this._nbUploadInProgress >= this._numConcurrentUploads) {
+        this._sendingRequestsInProgress = false;
+        log('delaying upload for next file(s) ' + this._uploadIndex
+          + '+ since there are already '
+          + this._nbUploadInProgress + ' active uploads');
+        return;
+      }
+    }
+    this._sendingRequestsInProgress = false;
+  };
+
+  Uploader.prototype.execute = function(options, callback) {
+    if (typeof options === 'function') {
+      // no options
+      callback = options;
+      options = {};
+    }
+    options = options || {};
+
+    var headers = jQuery.extend(true, {}, this._headers);
+    headers['Nuxeo-Transaction-Timeout'] = 5 + (this._timeout / 1000) | 0;
+    headers['Content-Type'] = 'application/json+nxrequest';
+    headers = jQuery.extend(true, headers, options.headers || {});
+
+    var xhrFields = {};
+    if (this._username && this._password) {
+      headers['Authorization'] = 'Basic ' + btoa(this._username + ':' + this._password);
+      xhrFields = {
+        withCredentials: true
+      }
+    }
+
+    var xhrParams = {
+      type: 'POST',
+      timeout: this._timeout,
+      headers: headers,
+      data: JSON.stringify(this._automationParams),
+      url: join(this._url, 'batch/execute'),
+      xhrFields: xhrFields
+    };
+
+    jQuery.ajax(xhrParams)
+      .done(function (data, textStatus, jqXHR) {
+        if (callback) {
+          callback(null, data, jqXHR)
+        }
+      })
+      .fail(function (jqXHR, textStatus, errorThrown) {
+        if (callback) {
+          callback(errorThrown, null, jqXHR)
+        }
+      });
+  };
+
+  Uploader.prototype._readyStateChange = function(xhr) {
+    var upload = xhr.upload;
+    log('readyStateChange event on file upload ' + upload.fileIndex
+      + ' (state : ' + xhr.readyState + ')');
+    if (xhr.readyState == 4) {
+      if (xhr.status == 200) {
+        this._load(upload);
+      } else {
+        log('Upload failed, status: ' + xhr.status);
+      }
+    }
+  };
+
+  Uploader.prototype._load = function(upload) {
+    var fileIdx = upload.fileIndex;
+    log('Received loaded event on  file ' + fileIdx);
+    if (this._completedUploads.indexOf(fileIdx) < 0) {
+      this._completedUploads.push(fileIdx);
+    } else {
+      log('Event already processsed for file ' + fileIdx + ', exiting');
+      return;
+    }
+    var now = new Date().getTime();
+    var timeDiff = now - upload.downloadStartTime;
+    this._uploadFinishedCallback(upload.fileIndex, upload.fileObj,
+      timeDiff);
+    log('upload of file ' + upload.fileIndex + ' completed');
+    if (upload.callback) {
+      upload.callback(upload.fileIndex, upload.fileObj,
+        timeDiff);
+    }
+    this._nbUploadInprogress--;
+    if (!this._sendingRequestsInProgress && this._uploadStack.length > 0
+      && this._nbUploadInprogress < this._numConcurrentUploads) {
+      // restart upload
+      log('restart pending uploads');
+      this.uploadFiles();
+    } else if (this._nbUploadInProgress == 0) {
+      this._batchFinishedCallback(batchId);
+    }
+  };
+
+  Uploader.prototype._progress = function(event) {
+    log(event);
+    if (event.lengthComputable) {
+      var percentage = Math.round((event.loaded * 100) / event.total);
+      if (event.target.currentProgress != percentage) {
+
+        log('progress event on upload of file '
+          + event.target.fileIndex + ' --> ' + percentage + '%');
+
+        event.target.currentProgress = percentage;
+        this._uploadProgressUpdatedCallback(
+          event.target.fileIndex, event.target.fileObj,
+          event.target.currentProgress);
+
+        var elapsed = new Date().getTime();
+        var diffTime = elapsed - event.target.currentStart;
+        if (diffTime >= this._uploadRateRefreshTime) {
+          var diffData = event.loaded - event.target.startData;
+          var speed = diffData / diffTime; // in KB/sec
+
+          this._uploadSpeedUpdatedCallback(event.target.fileIndex,
+            event.target.fileObj, speed);
+
+          event.target.startData = event.loaded;
+          event.target.currentStart = elapsed;
+        }
+        if (event.loaded == event.total) {
+          log('file ' + event.target.fileIndex
+            + ' detected upload complete');
+          // having all the bytes sent to the server does not mean the
+          // server did actually receive everything
+          // but since load event is not reliable on Webkit we need
+          // this
+          // window.setTimeout(function(){load(event.target, opts);},
+          // 5000);
+        } else {
+          log('file ' + event.target.fileIndex + ' not completed :'
+            + event.loaded + '/' + event.total);
+        }
+      }
+    }
+  };
+
+  return nuxeo;
+
+})(nuxeo || {});

@@ -9,7 +9,7 @@ chrome.tabs.onUpdated.addListener(function (inTabId, inChangeInfo, inTab) {
 	var r =  UTILS.getKeywordsFromGoogleUrl(inTab.url);
 	
 	console.log(r);
-	console.log(NUXEO.nuxeoHost);
+	console.log(UTILS_NUXEO.nuxeoHost);
 	
 	if( r.isGooglePage && r.keywords !== "") {
 		chrome.pageAction.show(inTabId);

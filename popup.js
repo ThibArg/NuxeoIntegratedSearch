@@ -14,19 +14,20 @@
  *				img.setAttribute("onclick", "some-inline-JavaScript"
  *		- If needed, we use HTML5 features, we don't care if they don't exist in IE ;->
  *		  For example, we use theElement.classList.add() to add a css class
- *		  Or jQuery. depends on our mood.
+ *		  Or jQuery. Depends on our mood.
  *  
  * --------------------------------------
  * DEPENDENCIES
  * --------------------------------------
  * The following scripts need to be loaded before this code runs. This is done by adding
- * the appropriate <SCRIPT .../> tag in popup.htmlies. If it is not loaded, all id hidden
+ * the appropriate <SCRIPT .../> tag in popup.html. If it is not loaded, all is hidden
  * in the DOMContentLoaded event
  * 
  * We need:
  *		jQuery and jQuery UI (for the accordion effect)
  *		UTILS (in utils.js)
- *      NUXEO (in NUXEO.js)
+ *		UTILS_NUXEO (in nuxeo-utils.js)
+ *      nuxeo (in nuxeo.js - this is the Nuxeo JavaScript SDK)
  * 
  * --------------------------------------
  * IMPORTANT
@@ -35,12 +36,13 @@
  */
 
 /**
- * Get our DOM elements once for all, instead of calling $()"#theID") several times.
+ * Get our DOM elements once for all, instead of calling jQuery()"#theID") several times.
  * Using "jq" instead of "$" because of double-click issues depending on the editor.
  */
 
-var _jqEnableSearch,	
-	_jqAskParams,
+ debugger;
+
+var _jqAskParams,
 	_jsParams,
 	_jqNuxeoHostLabel,
 	_jqNuxeoHost,
@@ -54,12 +56,16 @@ var _jqEnableSearch,
 	_jqResults,
 	_jqAccordion;
 
+// The nuxeo client
+var gNuxeoClient = null;
+
+var gKeywords = "";
 
 // Initializae the accordion, hide the connection error
-if(typeof $ !== "undefined") {
-	$(function() {
-		$("#accordion").accordion();
-		$("#connectionError").hide();
+if(typeof jQuery !== "undefined") {
+	jQuery(function() {
+		jQuery("#accordion").accordion();
+		jQuery("#connectionError").hide();
 	});
 }
 
@@ -67,28 +73,34 @@ if(typeof $ !== "undefined") {
  * _init
  * 
  * Called once the DOM is loaded:
+ *		- Initialize the nuxeo sdk and get a nuxeo client
  * 		- Initialize our variables
  * 		- Extend jQuery
  */
 function _init() {
-	_jqEnableSearch = $("#enableSearch");	
-	_jqAskParams = $("#askParams");	
-	_jsParams = $("#params");
-	_jqNuxeoHostLabel = $("#nuxeoHostLabel");
-	_jqNuxeoHost = $("#nuxeoHost");
-	_jqLogin = $("#login");
-	_jqPwd = $("#pwd");
-	_jqRememberMe = $("#rememberMe");
-	_jqPopupSubmit = $("#popupSubmit");
-	_jqBigError = $("#bigError");
-	_jqConnError = $("#connectionError");
-	_jqResultTitle = $("#resutTitle");
-	_jqResults = $("#displayResults");
-	_jqAccordion = $("#accordion");
+
+	// ======================================== Get a nuxeo client
+	gNuxeoClient = new nuxeo.Client();
+
+	// ======================================== Setup variables
+	_jqAskParams = jQuery("#askParams");	
+	_jsParams = jQuery("#params");
+	_jqNuxeoHostLabel = jQuery("#nuxeoHostLabel");
+	_jqNuxeoHost = jQuery("#nuxeoHost");
+	_jqLogin = jQuery("#login");
+	_jqPwd = jQuery("#pwd");
+	_jqRememberMe = jQuery("#rememberMe");
+	_jqPopupSubmit = jQuery("#popupSubmit");
+	_jqBigError = jQuery("#bigError");
+	_jqConnError = jQuery("#connectionError");
+	_jqResultTitle = jQuery("#resutTitle");
+	_jqResults = jQuery("#displayResults");
+	_jqAccordion = jQuery("#accordion");
 	
 	//..error-check none are null...
-	
 
+	// ======================================== Extend jQuery
+	// End of 2013
 	// No built-in easy way to check/uncheck/test a check box. "easy" means a basic boolean stuff.
 	// The same goes for enable/disable.
 	// => Add to the jQuery object
@@ -101,19 +113,20 @@ function _init() {
 			this.get(0).checked = inValue ? true : false;
 			return this;
 		},
-		isBoxChecked : function() {
+		isTheBoxChecked : function() {
 			return this.get(0).checked;
 		},
 		
-		doEnable : function(inEnable) {
+		doEnableMe : function(inEnable) {
 			this.get(0).disabled = inEnable ? false : true;// reverted: "inEnable" set "disabled"
 			return this;
 		},
 		
-		isObjectEnabled	: function() {
+		isMeEnabled	: function() {
 			return this.get(0).disabled ? true : false;
 		}
 	});
+
 }
 /*	Add event listeners once the DOM has fully loaded by listening for the
 	DOMContentLoaded` event on the document, and adding your listeners to
@@ -121,11 +134,11 @@ function _init() {
 */
 document.addEventListener('DOMContentLoaded', function (inEvt) {
 
-	// We need NUXEO and jQuery
-	if(		typeof NUXEO === "undefined"
+	// We need nuxeo and jQuery
+	if(		typeof nuxeo === "undefined"
 		||  typeof UTILS === "undefined"
-		||  typeof jQuery === "undefined"
-		||  typeof $ === "undefined" ) {
+		||	typeof UTILS_NUXEO === "undefined"
+		||  typeof jQuery === "undefined") {
 		// Need to use direct HTML APIs (not jQuery: It's eventually not here)
 		// Actually, we don't need jQuery to add/remove class, right? ;->
 		// Note: Not all browsers implement classList as of today (june, 2013) but we
@@ -140,16 +153,14 @@ document.addEventListener('DOMContentLoaded', function (inEvt) {
 	}
 	
 	_init();
-		
-	_jqEnableSearch.on("click", updateInterface)
-					.checkTheBox(true /*NUXEO.doDAMQuery*/);
+	
 	_jqPopupSubmit.on("click", doSaveInfos);
 	_jqNuxeoHostLabel.on("click", doFillWithDefault);
 	
-	_jqNuxeoHost.val(NUXEO.nuxeoHost);
-	_jqLogin.val(NUXEO.login);
-	_jqPwd.val(NUXEO.pwd);
-	_jqRememberMe.checkTheBox(NUXEO.remember);
+	_jqNuxeoHost.val(UTILS_NUXEO.nuxeoHost);
+	_jqLogin.val(UTILS_NUXEO.login);
+	_jqPwd.val(UTILS_NUXEO.pwd);
+	_jqRememberMe.checkTheBox(UTILS_NUXEO.remember);
 	
 	updateInterface();
 	
@@ -158,7 +169,7 @@ document.addEventListener('DOMContentLoaded', function (inEvt) {
 });
 
 function queryIfPossible() {
-	if(NUXEO.readyToQuery()) {
+	if(UTILS_NUXEO.readyToQuery()) {
 		chrome.tabs.getSelected(null, function(inTab) {
 			var kw = UTILS.getKeywordsFromGoogleUrl(inTab.url);
 			if(kw.isGooglePage) {
@@ -179,41 +190,33 @@ function clickOnThumbnail(inEvt) {
 	}
 }
 
-function updateInterface() {
-	
-	var queryAllowed = _jqEnableSearch.isBoxChecked();
-	
-	_jqNuxeoHost.doEnable(queryAllowed);
-	_jqLogin.doEnable(queryAllowed);
-	_jqPwd.doEnable(queryAllowed);
-	_jqRememberMe.doEnable(queryAllowed);
-	
-	if(queryAllowed) {
-		_jsParams.removeClass("disabled");
-	} else {
-		_jsParams.addClass("disabled");
-	}
+function updateInterface() {	
+	_jqNuxeoHost.doEnableMe(true);
+	_jqLogin.doEnableMe(true);
+	_jqPwd.doEnableMe(true);
+	_jqRememberMe.doEnableMe(true);
+
+	_jsParams.removeClass("disabled");
 }
 
-function displayResults(inResults, inKeywords) {
-	var i, max, allDocs, aDoc, img, label, div, dispRes, has2KwAtLeast;
+function displayResults(inResults) {
+	var i, max, allDocs, aDoc, img, label, div, dispRes, has2KwAtLeast, kwLabel;
 	
 	// Update accordion title
-	formatResultTitle(inResults, inKeywords);
+	formatResultTitle(inResults);
 	
 	// Remove previous if any
 	_jqResults.empty();
 	
 	has2KwAtLeast = false;
-	if(typeof inKeywords === "string") {
-		if(inKeywords === "") {
-			inKeywords = "(no keyword: Query on all Pictures)";
-		} else {
-			inKeywords = inKeywords.replace(" ", ", ");
-			has2KwAtLeast = inKeywords.indexOf(" ") > 0;
-		}
+	if(gKeywords == "") {
+		kwLabel = "(no keyword: Query on all Pictures)";
+	} else {
+		kwLabel = gKeywords.replace(" ", ", ");
+		has2KwAtLeast = kwLabel.indexOf(" ") > 0;
 	}
-	_jqResults.append("<p id='resultLabel'>" + (has2KwAtLeast ? "Keywords" : "keyword") + ": " + inKeywords + "</p>")
+
+	_jqResults.append("<p id='resultLabel'>" + (has2KwAtLeast ? "Keywords" : "keyword") + ": " + kwLabel + "</p>")
 	
 	// To just add basic div/img, let's use standard DOM APIs
 	dispRes = document.getElementById("displayResults");
@@ -259,7 +262,7 @@ function displayResults(inResults, inKeywords) {
 /*
  * forceGetEachThumbnail
  * 
- * We do have a big problem. When forst connecting to the Nuxoe server
+ * We do have a big problem. When first connecting to the Nuxeo server
  * (very first connection of after a "clear browsing data"), even if the
  * connection is ok, the thumbnails are not displayed, there is an error
  * that I could not clearly identify: The extension receives text/html
@@ -283,6 +286,8 @@ function displayResults(inResults, inKeywords) {
  * has finish the job, you can try to display the results"
  */
 function forceGetEachThumbnail(inResults, inCallback) {
+	console.log("forceGetEachThumbnail");
+	/*
 	var i, max,
 		inDoc, url,
 		countOfCallsDone, numberOfCallsToDo,
@@ -304,7 +309,7 @@ function forceGetEachThumbnail(inResults, inCallback) {
 					"Authorization"];
 	headersValues = ["application/json+nxrequest",
 					"image/*",
-					"Basic " + btoa(NUXEO.login + ":" + NUXEO.pwd) ];
+					"Basic " + btoa(UTILS_NUXEO.login + ":" + UTILS_NUXEO.pwd) ];
 	
 	numberOfCallsToDo = inResults.entries.length;
 	countOfCallsDone = 0;
@@ -332,47 +337,105 @@ function forceGetEachThumbnail(inResults, inCallback) {
 		
 		xhr.send();
 	});
+	*/
 }
 
 function getThumbnailURL(inDoc) {
-	//http://localhost:8080/nuxeo/nxthumb/default/a9bb0faa-75d9-4ac0-ad51-59a6b1ba826c/blobholder:0/bag-2.JPG
-	return NUXEO.nuxeoHost + "/nxthumb/default/" + inDoc.uid + "/blobholder:0/" + inDoc.title;
+
+	//http://{server}:{port}/nuxeo/nxpicsfile/{repository}/{uuid}/{viewName}:content/{fileName}
+	var url = UTILS_NUXEO.nuxeoHost + "/nxpicsfile/default/" + inDoc.uid + "/Thumbnail:content/" + inDoc.properties["file:content"].name;
+	return url;
 }
 
 function getNuxeoDocURL(inDoc) {
 	// http://localhost:8080/nuxeo/nxdam/default/asset-library/bag-3.jpg@assets
-	//return NUXEO.nuxeoHost + "/nxdam/default" + inDoc.path + "@assets?";
+	//return UTILS_NUXEO.nuxeoHost + "/nxdam/default" + inDoc.path + "@assets?";
 	
 	// For a display in DM view:
 	// http://localhost:8080//nuxeo/nxpath/default/asset-library/bag-3.jpg@assets@view_documents?mainTabId=MAIN_TABS ... etc ...
-	return NUXEO.nuxeoHost + "/nxdam/default" + inDoc.path + "@view_documents?mainTabId=MAIN_TABS";
+	return UTILS_NUXEO.nuxeoHost + "/nxdam/default" + inDoc.path + "@view_documents?mainTabId=MAIN_TABS";
 	
 }
 
-function formatResultTitle(inResults, inKeywords) {
+function formatResultTitle(inResults) {
 	// jQuery UI has added a span for the arrow. Lets not remove it
 	var title = _jqResultTitle.children()[0].outerHTML;
 	
 	title += "Results";
-	if("entries" in inResults) {
-		title += ": " + UTILS.pluralize(inResults.entries.length, "picture found", "pictures found");
+	if("resultsCount" in inResults) {
+		if(inResults.resultsCount == 0) {
+			title = "No Picture found";
+		} else {
+			title += ": " + inResults.entries.length + " among " + UTILS.pluralize(inResults.resultsCount, "picture found", "pictures found");
+		}
 	}
 	_jqResultTitle.html(title);
 }
 
+ /* the response from Restler, or jqXHR from jQuery when using browser client */
+function queryCallback(error, data, response) {
+	if (error) {
+		// ============================================= Error
+		formatResultTitle({}, "");
+  		_jqAskParams.fadeOut(1000, function() {
+  			_jqConnError.fadeIn(1000, function() {
+  				setTimeout(function() {
+  					_jqConnError.fadeOut(1000);
+  					_jqAskParams.fadeIn(1000);
+  				}, 2000);
+  			});
+  		});
+ 	} else {
+		// ============================================= Success
+		displayResults(data);
+	}
+}
+
 function runTheQuery(inKeywords) {
-	var r = "Results";
+
+	gKeywords = inKeywords;
+
+	// Prepare statement
+	var nxql = "";
+
+	// We query only for "Picture" documents
+	nxql = "SELECT * FROM Picture"
+			+ " WHERE ecm:mixinType != 'HiddenInNavigation'"
+				+ " AND ecm:isCheckedInVersion = 0"
+				+ " AND ecm:currentLifeCycleState != 'deleted'";
+	if(gKeywords !=  '') {
+		nxql += " AND ecm:fulltext = '" + gKeywords + "'";
+	}
+
+	var client = new nuxeo.Client({
+		baseURL: UTILS_NUXEO.nuxeoHost,
+  		username: UTILS_NUXEO.login,
+  		password: UTILS_NUXEO.pwd
+	});
+
+	// Need this because we are not in regular page already connected
+	// to a Nuxeo server, but we are in a Chrome extension
+	//UTILS_NUXEO.updateNuxeoClient(gNuxeoClient);
+
+	// We want the file schema to get the url
+	client.schema("file");
+
+	// Now, query
+	client.operation('Document.PageProvider')
+				.params({
+					query: nxql,
+	          		pageSize: UTILS_NUXEO.queryLimit,
+	          		page: 0,
+				})
+				.execute(queryCallback);
+
+/*
 	NUXEO.queryDAM({
 		keywords: inKeywords,
 		//limit: some value
 		//moreHeaders: [??],
 		onSuccess: function(inResults) {
-//			displayResults(inResults, inKeywords);
-			forceGetEachThumbnail(inResults,
-					function() {
-						console.log("At last, calling displayResults")
-						displayResults(inResults, inKeywords);
-					});
+			displayResults(inResults, inKeywords);
 		},
 		onError: function(inEvt) {
 			formatResultTitle({}, "");
@@ -384,17 +447,9 @@ function runTheQuery(inKeywords) {
 					}, 2000);
 				});
 			});
-			
-			// We could be more specific...
-			/*
-			if(inEvt.target.status == 0) {
-				
-			} else {
-				
-			}
-			*/
 		}
 	});
+*/
 }
 
 function doSaveInfos(inEvt) {
@@ -413,14 +468,10 @@ function doSaveInfos(inEvt) {
 	}
 	// ================================================= </TEST>
 	
-	// In this version of the plug-in, query in DAM is always allowed
-	_jqEnableSearch.checkTheBox(true);
-	
-	NUXEO.doDAMQuery = _jqEnableSearch.isBoxChecked();
-	NUXEO.setParams(_jqNuxeoHost.val(),
+	UTILS_NUXEO.setParams(_jqNuxeoHost.val(),
 					_jqLogin.val(),
 					_jqPwd.val(),
-					_jqRememberMe.isBoxChecked() );
+					_jqRememberMe.isTheBoxChecked() );
 	
 	queryIfPossible();
 	//window.close();
@@ -430,20 +481,17 @@ function doSaveInfos(inEvt) {
 // fills the values with the default one (localhost:8080, Administrator)
 function doFillWithDefault(inEvt) {
 	if(inEvt.altKey) {
-		var val = NUXEO.getTestValues();
+		var val = UTILS_NUXEO.getTestValues();
 		
-		_jqNuxeoHost.val(NUXEO.TEST_LOCALHOST);
-		_jqLogin.val(NUXEO.TEST_LOGIN);
-		_jqPwd.val(NUXEO.TEST_PWD);
-		_jqEnableSearch.checkTheBox(true);
+		_jqNuxeoHost.val(UTILS_NUXEO.TEST_LOCALHOST);
+		_jqLogin.val(UTILS_NUXEO.TEST_LOGIN);
+		_jqPwd.val(UTILS_NUXEO.TEST_PWD);
 		
 		updateInterface();
 	} else if (inEvt.shiftKey) {
 		_jqNuxeoHost.val("http://dam.cloud.nuxeo.com/nuxeo");
 		_jqLogin.val("Administrator");
 		_jqPwd.val("Administrator");
-		
-		_jqEnableSearch.checkTheBox(true);
 	}
 }
 

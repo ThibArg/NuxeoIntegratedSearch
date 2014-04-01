@@ -15,10 +15,12 @@
 			- Policy documentation[1] for details and explanation.
 			- [1]: http://developer.chrome.com/extensions/contentSecurityPolicy.html
 		 -->
-		<script src="scripts//3d-party/jquery-2.0.0.min.js"></script>
-		<script src="scripts//3d-party/jqueryui-1.10.3.min.js"></script>
-		<script src="scripts/utils.js"></script>		
-		<script src="scripts/nuxeo/NUXEO.js"></script>
+		<script src="scripts/3d-party/jquery-2.0.0.min.js"></script>
+		<script src="scripts/3d-party/jqueryui-1.10.3.min.js"></script>
+		<script src="scripts/nuxeo/nuxeo.js"></script>
+		<script src="scripts/utils.js"></script>
+		<script src="scripts/nuxeo-utils.js"></script>
+		
 		<script src="popup.js"></script>
 	</head>
 	
@@ -35,12 +37,6 @@
 					</div>
 					<div id="askParams">
 						<form id="popupForm" name="popupForm" action="#">
-							<div>
-								<div class="enableCheckboxBlock doHide">
-									<input type="checkbox" id="enableSearch" name="enableSearch" tabindex="1"/>
-									<label for="enableSearch">Enable Search in Nuxeo</label>
-								</div>
-							</div>
 							<div id="main2">
 								<div>
 									<div class="popupFieldBlock main2">
