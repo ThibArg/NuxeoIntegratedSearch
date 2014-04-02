@@ -1,9 +1,9 @@
 {
 	"manifest_version": 2,
-	"name": "Nuxeo Images Web Search Extension",
-	"version": "0.8",
+	"name": "Nuxeo Integrated Search Extension",
+	"version": "1.0",
 	
-	"description": "When searching images.google.com for images, this extension will also display results from your Nuxeo DAM system. It requires Nuxeo v5.7 or greater.",
+	"description": "When searching on google.com, this extension will display results from your Nuxeo DAM server, querying for 'Picture' document having the selected keywords in their metadata. It requires Nuxeo v5.8 or greater.",
 	"icons": {	"16"  : "images/frog-16.png",
 				"48"  : "images/frog-48.png",
 				"128" : "images/frog-128.png" },

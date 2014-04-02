@@ -4,9 +4,6 @@
  *	Utilities to:
  *		- Store values locally (url and credentials)
  *		- Get default values (mainly for testing)
- *	
- * 
- * TODO: Doc for WARNING about accessors ("remember" will save/remove params from the local storage for example)
  */
 if(typeof UTILS_NUXEO !== 'undefined') {
 	console.log("[WARN] Nuxeo initialization called more than once");
@@ -23,7 +20,6 @@ UTILS_NUXEO = null;
 	// Using an object so toString() is easier to write
 	var K =  {
 		QUERY_LIMIT_DEFAULT	: 12,// 4 rows of 3 for example
-		QUERY_LIMIT_MAX		: 24,
 	
 	// Administrator/Administrator (for quick test)
 		TEST_LOCALHOST		: "http://localhost:8080/nuxeo",
@@ -35,7 +31,7 @@ UTILS_NUXEO = null;
 	};
 	
 	//--------------------------------------
-	// constructor and functions
+	// Constructor and functions
 	//--------------------------------------
 	function _UTILS_NUXEO() {
 		var _nuxeoHost = "",
@@ -48,7 +44,13 @@ UTILS_NUXEO = null;
 		// Properties
 		//--------------------------------------
 		this.__defineGetter__('nuxeoHost', function() { return _nuxeoHost; });
-		this.__defineSetter__('nuxeoHost', function(inValue) { _nuxeoHost = inValue ? true : false; });
+		this.__defineSetter__('nuxeoHost', function(inValue) {
+											if(typeof(inValue) === "string") {
+												_nuxeoHost = inValue;
+											} else {
+												throw new TypeError("This property is a string");
+											}
+										});
 		
 		this.__defineGetter__('login', function() { return _login; });
 		this.__defineSetter__('login', function(inValue) {
@@ -75,17 +77,19 @@ UTILS_NUXEO = null;
 
 		this.__defineGetter__('remember', function() { return _remember; });
 		this.__defineSetter__('remember', function(inValue) {
+											var previous = _remember
 											_remember = inValue ? true : false;
-											if(_remember) {
-												_saveParams();
-											} else {
-												_removeSavedParams();
+											if(_remember !== previous) {
+												if(_remember) {
+													_saveParams();
+												} else {
+													_removeSavedParams();
+												}
 											}
 										});
 		
 		// Constants
 		this.__defineGetter__('QUERY_LIMIT_DEFAULT', function() { return K.QUERY_LIMIT_DEFAULT; });
-		this.__defineGetter__('QUERY_LIMIT_MAX', function() { return K.QUERY_LIMIT_MAX; });
 		this.__defineGetter__('TEST_LOCALHOST', function() { return K.TEST_LOCALHOST; });
 		this.__defineGetter__('TEST_LOGIN', function() { return K.TEST_LOGIN; });
 		this.__defineGetter__('TEST_PWD', function() { return K.TEST_PWD; });
@@ -93,7 +97,6 @@ UTILS_NUXEO = null;
 		this.__defineGetter__('KEY_FOR_STORAGE', function() { return K.KEY_FOR_STORAGE; });
 		
 		this.__defineSetter__('QUERY_LIMIT_DEFAULT', function(inValue) { throw new TypeError("This property is read-only"); });
-		this.__defineSetter__('QUERY_LIMIT_MAX', function(inValue) { throw new TypeError("This property is read-only"); });
 		this.__defineSetter__('TEST_LOCALHOST', function(inValue) { throw new TypeError("This property is read-only"); });
 		this.__defineSetter__('TEST_LOGIN', function(inValue) { throw new TypeError("This property is read-only"); });
 		this.__defineSetter__('TEST_PWD', function(inValue) { throw new TypeError("This property is read-only"); });
@@ -122,6 +125,31 @@ UTILS_NUXEO = null;
 
 			return result;
 		}
+
+		/**
+		 * _saveParams
+		 * We don't try-catch. It's bad (not doing it is bad. try-catch is not bad)
+		 *
+		 * Numeric values are converted to string
+		 */
+		function _saveParams() {
+			/*
+			window.localStorage.setItem(K.KEY_FOR_STORAGE,
+										JSON.stringify({
+											nuxeoHost		: _nuxeoHost,
+											login			: _login,
+											pwd				: _poorManStringXOR(_pwd),
+											queryLimit		: "" + _queryLimit
+										}) );
+			*/
+			window.localStorage.setItem(K.KEY_FOR_STORAGE,
+										_poorManStringXOR(JSON.stringify({
+											nuxeoHost		: _nuxeoHost,
+											login			: _login,
+											pwd				: _pwd,
+											queryLimit		: "" + _queryLimit
+										})) );
+		}
 		
 		/**
 		 * _loadSavedParams
@@ -135,7 +163,7 @@ UTILS_NUXEO = null;
 			_remember = false;
 			
 			try {
-				var values = JSON.parse( window.localStorage[K.KEY_FOR_STORAGE] );
+				var values = JSON.parse( _poorManStringXOR(window.localStorage[K.KEY_FOR_STORAGE]) );
 				
 				if(values) {
 					if("nuxeoHost" in values && typeof values.nuxeoHost === "string") {
@@ -147,11 +175,11 @@ UTILS_NUXEO = null;
 					}
 
 					if("pwd" in values && typeof values.pwd === "string") {
-						_pwd = _poorManStringXOR(values.pwd);
+						_pwd = values.pwd;
 					}
 
 					if("queryLimit" in values && typeof values.queryLimit === "string") {
-						_queryLimit = parseInt( _poorManStringXOR(values.queryLimit) );
+						_queryLimit = parseInt(values.queryLimit);
 						if(isNaN(_queryLimit) || _queryLimit < 1) {
 							_queryLimit = K.QUERY_LIMIT_DEFAULT;
 						}
@@ -163,22 +191,6 @@ UTILS_NUXEO = null;
 			} catch(e) {
 				// No values or pb in storage
 			}
-		}
-
-		/**
-		 * _saveParams
-		 * We don't try-catch. It's bad (not doing it. try-catch is not bad)
-		 *
-		 * Numeric values are converted to string
-		 */
-		function _saveParams() {
-			window.localStorage.setItem(K.KEY_FOR_STORAGE,
-										JSON.stringify({
-											nuxeoHost		: _nuxeoHost,
-											login			: _login,
-											pwd				: _poorManStringXOR(_pwd),
-											queryLimit		: "" + _queryLimit
-										}) );
 		}
 		
 		/**
@@ -201,9 +213,9 @@ UTILS_NUXEO = null;
 			return JSON.stringify (
 				{	constants	: K,
 				
-					_nuxeoHost	: _nuxeoHost,
-					_login		: _login,
-					_pwd		: _pwd
+					nuxeoHost	: _nuxeoHost,
+					login		: _login,
+					pwd			: _pwd
 				});
 		};
 		
@@ -256,26 +268,8 @@ UTILS_NUXEO = null;
 				_removeSavedParams();
 			}
 		};
-
-		/**
-		 * updateNuxeoClient
-		 *
-		 * We need this wrapper because we are in a Chrome Extension
-		 *		=> Not already connected to a nuxe server
-		 *		=> We can't	use relative paths.
-		 */
-		this.updateNuxeoClient = function(inNuxeoClient) {
-			// No error-check. Assume inNuxeoClient is a valid object
-			// created with new nuxeo.Client().
-			inNuxeoClient._baseURL = _nuxeoHost;
-		 	inNuxeoClient._restURL = _nuxeoHost + "/site/api/v1";
-			inNuxeoClient._automationURL = _nuxeoHost + "/site/automation";
-
-			inNuxeoClient._username = _login;
-			inNuxeoClient._password = _pwd;
-		}
 		
-		// All declared, time to initialized self
+		// All declared, time to initialize self
 		_loadSavedParams();
 
 	} // function _UTILS_NUXEO()
