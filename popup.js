@@ -178,6 +178,7 @@ function _init() {
 	});
 
 }
+
 /*	Add event listeners once the DOM has fully loaded by listening for the
 	DOMContentLoaded` event on the document, and adding your listeners to
 	specific elements when it triggers.
@@ -215,6 +216,16 @@ document.addEventListener('DOMContentLoaded', function (inEvt) {
 	queryIfPossible();
 		
 });
+
+function showHideWaiting(inShow) {
+	if(inShow) {
+		document.getElementById("waiting").classList.remove("doHide");
+		document.getElementById("waiting").classList.add("doShow");
+	} else {
+		document.getElementById("waiting").classList.remove("doShow");
+		document.getElementById("waiting").classList.add("doHide");
+	}
+}
 
 function queryIfPossible() {
 	if(UTILS_NUXEO.readyToQuery()) {
@@ -307,6 +318,9 @@ function displayResults(inResults) {
 		if(gSecondQuery) {
 			//console.log("...OK, DISPLAY");
 			gSecondQuery = false;
+
+			showHideWaiting(false);
+
 			_jqAccordion.accordion( "option", "active", 1);
 		} else {
 			//console.log("...ONE MORE TIME PLEASE");
@@ -353,7 +367,9 @@ function formatResultTitle(inResults) {
   *
   */
 function queryCallback(error, data, response) {
-	if (error) {
+	if (error || !data) {
+		showHideWaiting(false);
+		
 		// ============================================= Error
 		formatResultTitle({}, "");
   		_jqAskParams.fadeOut(1000, function() {
@@ -372,6 +388,10 @@ function queryCallback(error, data, response) {
 
 function runTheQuery(inKeywords) {
 	gKeywords = inKeywords;
+
+	if(!gSecondQuery) {
+		showHideWaiting(true);
+	}
 
 	// Prepare statement
 	var nxql = "";

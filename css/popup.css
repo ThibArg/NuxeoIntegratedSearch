@@ -1,16 +1,13 @@
 /* popup.css
-
 */
 
 /**************************************************
  Main, general elements
  *************************************************/
 body {
-	/* <used_in_dam> */
-	background: #f6f6f6;
+	background: white; /*#f6f6f6;*/
 	color: rgb(68, 68, 68);
 	font-family: 'Lucida Grande', Arial, Helvetica, Geneva, sans-serif;
-	/* </used_in_dam> */
 
 	font-size: 14px;
 	line-height: 1.5;
@@ -28,10 +25,15 @@ body.popup {
 
 #askParams {
 	margin: 1px;
-	/*padding: 7px 12px;*/
-	/*padding-bottom: 9px;*/
 	-webkit-border-radius: 2px;
 	background: #f2f5f6;
+	padding: 15px;
+}
+
+img.center {
+	display: block;
+	margin-left: auto;
+	margin-right: auto;
 }
 
 #resultLabel {
@@ -41,15 +43,6 @@ body.popup {
 	color: white;
 	text-align:left;
 }
-
-/*
-.thumbnailContainer {
-	display:inline;
-	width: 128px;
-	height: 128px;
-	margin: 3px;
-}
-*/
 
 .thumbnailContainer {
 	display:inline-block;
@@ -67,19 +60,6 @@ body.popup {
 	text-align: center;
 	vertical-align: middle;
 }
-
-/*
-.nuxeoThumbnail {
-	margin: 10px;
-	vertical-align: middle;
-	border: 1px solid black;
-	border-color: white;
-	width: 128px;
-	height: 128px;
-
-	cursor:pointer;
-}
-*/
 
 .nuxeoThumbnail {
 	vertical-align: middle;
@@ -136,12 +116,11 @@ body.popup {
 	padding-bottom= 0px;
 	padding-right= 0px;
 
-	background-color: #f6f6f6;
+	background-color: white; /*#f6f6f6;*/
 }
 
 #displayResults {
 	min-width: 500px;
-/*	min-height: 500px;*/
 	background: black;
 }
 
@@ -191,6 +170,7 @@ body.popup {
 .popupButton:hover {
 	cursor: pointer;
 }
+
 .bigError {
 	min-width: 300px;
 	font-size: 18px;
